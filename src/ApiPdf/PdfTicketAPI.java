@@ -1,5 +1,7 @@
 package ApiPdf;
 
+import BarCodeGenerator.BarcodeGenerator;
+import com.google.zxing.WriterException;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDPage;
 import org.apache.pdfbox.pdmodel.PDPageContentStream;
@@ -9,9 +11,12 @@ import org.apache.pdfbox.pdmodel.font.PDType1Font;
 import org.apache.pdfbox.pdmodel.font.Standard14Fonts;
 import org.apache.pdfbox.pdmodel.graphics.image.PDImageXObject;
 import org.apache.pdfbox.pdmodel.graphics.state.PDExtendedGraphicsState;
+import org.apache.pdfbox.util.Matrix; // Importa la classe Matrix
 
 import java.io.IOException;
 import java.util.List;
+
+import static BarCodeGenerator.BarcodeGenerator.generateQRCode;
 
 public class PdfTicketAPI implements PdfAPI {
     PDDocument document;
@@ -44,7 +49,22 @@ public class PdfTicketAPI implements PdfAPI {
 
                 // Aggiungi il logo
                 drawLogo(contents, data.get(5), ticketSize, doc);
+
+                // Genera e aggiungi il codice a barre
+                //String barcodeFilePath = data.get(6);
+                //BarcodeGenerator.generateBarcode(data.get(2), barcodeFilePath);
+                //drawBarcode(contents, barcodeFilePath, ticketSize, doc); // Passa il documento
+
+                // Genera e aggiungi il codice QR
+                String qrCodeFilePath = data.get(6); // Assicurati che questo sia il percorso corretto per il QR code
+                generateQRCode(data.get(2), qrCodeFilePath); // Usa i dati necessari
+                drawQRCode(contents, qrCodeFilePath, ticketSize, doc); // Passa il documento
+
+            } catch (WriterException e) {
+                throw new RuntimeException(e);
             }
+
+
 
             // Salva il documento PDF
             doc.save(outfile);
@@ -52,6 +72,58 @@ public class PdfTicketAPI implements PdfAPI {
         } catch (IOException ioe) {
             ioe.printStackTrace();
         }
+    }
+
+    // Funzione per disegnare il codice a barre a sinistra
+    private void drawBarcode(PDPageContentStream contents, String barcodePath, PDRectangle ticketSize, PDDocument doc) throws IOException {
+        PDImageXObject barcodeImage = PDImageXObject.createFromFile(barcodePath, doc);
+        System.out.println("Dimensioni codice a barre: " + barcodeImage.getWidth() + "x" + barcodeImage.getHeight());
+
+        // Larghezza e altezza originali del codice a barre
+        float barcodeWidth = barcodeImage.getWidth();
+        float barcodeHeight = barcodeImage.getHeight();
+
+        // Calcola la posizione per centrare verticalmente e posizionare a destra
+        float barcodeX = ticketSize.getWidth() - 10; // Margine di 10 dal bordo destro
+        float barcodeY = (ticketSize.getHeight() - barcodeWidth) / 2; // Centra verticalmente (usando la larghezza per l'altezza dopo la rotazione)
+
+        // Inizia un nuovo gruppo grafico per le trasformazioni
+        contents.saveGraphicsState();
+
+        // Crea la matrice di trasformazione per ruotare l'immagine di 90 gradi in senso orario
+        Matrix matrix = new Matrix();
+        matrix.rotate(Math.toRadians(90)); // Ruota di 90 gradi in senso orario
+        matrix.translate(barcodeX, barcodeY); // Trasla l'immagine nella posizione corretta
+
+        // Applica la trasformazione
+        contents.transform(matrix);
+
+        // Disegna l'immagine del codice a barre ruotata
+        // Inverti larghezza e altezza poiché l'immagine è ruotata
+        contents.drawImage(barcodeImage, 0, 0, barcodeHeight, barcodeWidth); // Usa altezza e larghezza invertite
+
+        // Ripristina lo stato grafico
+        contents.restoreGraphicsState();
+    }
+
+    // Funzione per disegnare il QR Code
+    private void drawQRCode(PDPageContentStream contents, String qrCodePath, PDRectangle ticketSize, PDDocument doc) throws IOException {
+        PDImageXObject qrCodeImage = PDImageXObject.createFromFile(qrCodePath, doc);
+
+        // Imposta le dimensioni desiderate per il QR Code
+        float qrCodeScaleFactor = 0.40f; // Fattore di scala per ridurre le dimensioni (40%)
+        float qrCodeWidth = qrCodeImage.getWidth() * qrCodeScaleFactor;
+        float qrCodeHeight = qrCodeImage.getHeight() * qrCodeScaleFactor;
+
+        // Posizione a destra
+        float qrCodeX = ticketSize.getWidth() - qrCodeWidth - 10; // Margine di 10 dal bordo destro
+
+        // Posiziona il QR Code più in basso, allineato con il logo
+        float logoY = 20; // Distanza dal fondo del biglietto dove si trova il logo
+        float qrCodeY = logoY; // Posiziona il QR Code alla stessa altezza del logo
+
+        // Disegna il QR Code
+        contents.drawImage(qrCodeImage, qrCodeX, qrCodeY, qrCodeWidth, qrCodeHeight);
     }
 
     // Funzione per disegnare l'immagine di sfondo
